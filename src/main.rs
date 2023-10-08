@@ -1,16 +1,10 @@
 use std::env;
-use std::ops::Add;
 
-use chrono::{Datelike, Timelike};
 use serenity::{async_trait, builder::CreateEmbedAuthor};
 
 use serenity::model::gateway::Ready;
 use serenity::prelude::*;
 extern crate dotenv;
-use tokio::{
-    fs::File,
-    io::{AsyncReadExt, AsyncWriteExt},
-};
 
 use dotenv::dotenv;
 struct Handler {
