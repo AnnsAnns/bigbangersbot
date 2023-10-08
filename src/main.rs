@@ -16,9 +16,9 @@ use dotenv::dotenv;
 struct Handler {
     channel_id: u64,
     server_id: u64,
+    reaction_threshold: u64,
 }
 
-const REACTION_THRESHOLD: u64 = 1;
 const REACTION_EMOJI: &str = "⭐";
 const APPROVED_EMOJI: &str = "🌠";
 
@@ -83,7 +83,7 @@ impl EventHandler for Handler {
 
                     let star_reaction = star_reactions.unwrap().clone();
 
-                    if star_reaction.count < REACTION_THRESHOLD {
+                    if star_reaction.count < self.reaction_threshold {
                         continue;
                     }
 
@@ -155,6 +155,8 @@ async fn main() {
     let token = env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
     let channel_id = env::var("CHANNEL_ID").expect("Expected a channel id in the environment");
     let server_id = env::var("SERVER_ID").expect("Expected a server id in the environment");
+    let reaction_threshold =
+        env::var("REACTION_THRESHOLD").expect("Expected a reaction threshold in the environment");
 
     let intents = GatewayIntents::GUILD_MESSAGES | GatewayIntents::DIRECT_MESSAGES;
 
@@ -162,6 +164,7 @@ async fn main() {
         .event_handler(Handler {
             channel_id: channel_id.parse::<u64>().unwrap(),
             server_id: server_id.parse::<u64>().unwrap(),
+            reaction_threshold: reaction_threshold.parse::<u64>().unwrap(),
         })
         .await
         .expect("Err creating client");
