@@ -52,6 +52,10 @@ impl EventHandler for Handler {
                 };
 
                 for message in messages {
+                    if message.author.id == *own_id {
+                        continue;
+                    }
+
                     let approved_reactions = message
                         .reaction_users(&ctx.http, approved_emoji.clone(), None, None)
                         .await;
