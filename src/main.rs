@@ -85,7 +85,11 @@ impl EventHandler for Handler {
                         continue;
                     }
 
-                    let author_name = message.author.name.clone();
+                    let author_name = &message
+                        .author
+                        .nick_in(&ctx.http, self.server_id)
+                        .await
+                        .unwrap_or(message.author.name.clone());
 
                     let msg_url = &message.link_ensured(&ctx.http).await;
                     let channel = ctx.http.get_channel(self.channel_id).await.unwrap().id();
@@ -98,6 +102,7 @@ impl EventHandler for Handler {
                                     CreateEmbedAuthor::default()
                                         .icon_url(message.author.avatar_url().unwrap_or_default())
                                         .name(author_name)
+                                        .url("https://www.youtube.com/watch?v=qWNQUvIk954")
                                         .to_owned(),
                                 );
                                 if image.is_some() {
