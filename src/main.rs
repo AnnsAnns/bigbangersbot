@@ -1,16 +1,37 @@
-use std::env;
-
+use serde::{Serialize, Deserialize};
 use serenity::{async_trait, builder::CreateEmbedAuthor};
 
 use serenity::model::gateway::Ready;
 use serenity::prelude::*;
-extern crate dotenv;
 
-use dotenv::dotenv;
 struct Handler {
-    channel_id: u64,
-    server_id: u64,
-    reaction_threshold: u64,
+    config: Config,
+}
+
+
+#[derive(Serialize, Deserialize, Debug)]
+enum Priority {
+    Low,
+    Medium,
+    High,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct PriorityChannel {
+    id: u64,
+    priority: Priority,
+}
+
+
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+struct Config {
+    channels: Vec<PriorityChannel>,
+    discord_token: String,
+    discord_channel: u64,
+    discord_server: u64,
+    threshold: u64,
 }
 
 const REACTION_EMOJI: &str = "⭐";
@@ -30,7 +51,7 @@ impl EventHandler for Handler {
         loop {
             let channels = ctx
                 .http
-                .get_guild(self.server_id)
+                .get_guild(self.config.discord_server)
                 .await
                 .unwrap()
                 .channels(&ctx.http)
@@ -81,18 +102,18 @@ impl EventHandler for Handler {
 
                     let star_reaction = star_reactions.unwrap().clone();
 
-                    if star_reaction.count < self.reaction_threshold {
+                    if star_reaction.count < self.config.threshold {
                         continue;
                     }
 
                     let author_name = &message
                         .author
-                        .nick_in(&ctx.http, self.server_id)
+                        .nick_in(&ctx.http, self.config.discord_server)
                         .await
                         .unwrap_or(message.author.name.clone());
 
                     let msg_url = &message.link_ensured(&ctx.http).await;
-                    let channel = ctx.http.get_channel(self.channel_id).await.unwrap().id();
+                    let channel = ctx.http.get_channel(self.config.discord_channel).await.unwrap().id();
                     let image = message.attachments.first();
                     let embed = message.embeds.first();
                     channel
@@ -142,32 +163,21 @@ impl EventHandler for Handler {
                         .unwrap();
                 }
             }
-
-            // Sleep for 5 minutes
-            tokio::time::sleep(std::time::Duration::from_secs(60 * 5)).await;
         }
     }
 }
 
 #[tokio::main]
 async fn main() {
-    // Load the environment variables from the .env file.
-    dotenv().ok();
-
-    // Configure the client with your Discord bot token in the environment.
-    let token = env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
-    let channel_id = env::var("CHANNEL_ID").expect("Expected a channel id in the environment");
-    let server_id = env::var("SERVER_ID").expect("Expected a server id in the environment");
-    let reaction_threshold =
-        env::var("REACTION_THRESHOLD").expect("Expected a reaction threshold in the environment");
+    // Parse channels from config
+    let config: Config = serde_json::from_str(&std::fs::read_to_string("config.json").unwrap())
+        .expect("Failed to parse config.json");
 
     let intents = GatewayIntents::GUILD_MESSAGES | GatewayIntents::DIRECT_MESSAGES;
 
-    let mut client = Client::builder(&token, intents)
+    let mut client = Client::builder(&config.discord_token, intents)
         .event_handler(Handler {
-            channel_id: channel_id.parse::<u64>().unwrap(),
-            server_id: server_id.parse::<u64>().unwrap(),
-            reaction_threshold: reaction_threshold.parse::<u64>().unwrap(),
+            config,
         })
         .await
         .expect("Err creating client");

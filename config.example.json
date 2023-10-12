@@ -1,0 +1,16 @@
+{
+    "discordChannel": 0,
+    "discordServer": 0,
+    "discordToken": "<your_token>",
+    "threshold": 1,
+    "channels": [
+        {
+            "id": 0,
+            "priority": "Low"
+        },
+        {
+            "id": 1,
+            "priority": "Medium"
+        }
+    ]
+}
