@@ -118,8 +118,8 @@ async fn queue(handler: &Handler, ctx: Context, channel_id: u64) {
 
                     let content = if message.content.is_empty() {
                         match embed {
-                            Some(embed) => embed.title.clone().unwrap_or("Found nothing :(".to_string()),
-                            None => "Found nothing :(".to_string(),
+                            Some(embed) => embed.title.clone().unwrap_or("".to_string()),
+                            None => "".to_string(),
                         }
                     } else {
                         message.content.clone()
