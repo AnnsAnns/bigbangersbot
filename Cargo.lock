@@ -97,6 +97,7 @@ name = "big-bangers-bot"
 version = "1.0.1"
 dependencies = [
  "chrono",
+ "rand",
  "serde",
  "serde_json",
  "serenity",

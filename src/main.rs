@@ -1,3 +1,4 @@
+use rand::seq::SliceRandom;
 use serde::{Deserialize, Serialize};
 use serenity::{async_trait, builder::CreateEmbedAuthor};
 
@@ -33,6 +34,24 @@ struct Config {
 
 const REACTION_EMOJI: &str = "⭐";
 const APPROVED_EMOJI: &str = "🌠";
+
+const REPLIES: [&str; 15] = [
+    "What a Big Banger 🤩",
+    "I wish I came up with that 🤣",
+    "lmaoooooooooo 🤣🤣🤣🤣🤣🤣🤣",
+    "why isn't this on SNL yet😆😆😆",
+    "I'm dying 😂😂",
+    "erm... that just happened... 😳",
+    "I'm not sure what to say... 😶",
+    "I've committed vehicular manslaughter 🤣👍",
+    "Among US Sussy Baka Moment 😳",
+    "This is funnier than Family Guy!!! 😂😂😂",
+    "https://www.youtube.com/watch?v=4VTBMznLrWs",
+    "This reminds me of Sheldon Cooper from Big Bang Theory BAZINGA HAHAHA",
+    "I wish Obama was here to see this!",
+    "https://www.youtube.com/watch?v=SCTFu7QYbQs",
+    "I've run out of Reply Ideas 👍👍👍"
+];
 
 async fn queue(handler: &Handler, ctx: Context, channel_id: u64) {
     let approved_emoji =
@@ -138,6 +157,11 @@ async fn queue(handler: &Handler, ctx: Context, channel_id: u64) {
             .react(&ctx.http, approved_emoji.clone())
             .await
             .unwrap();
+        // Reply with random reply
+        let reply = REPLIES
+            .choose(&mut rand::thread_rng())
+            .unwrap_or(&"Couldn't think of a funny reply :(");
+        message.reply(&ctx.http, reply).await.unwrap();
     }
 }
 
