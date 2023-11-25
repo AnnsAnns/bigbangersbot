@@ -147,7 +147,7 @@ async fn queue(handler: &Handler, ctx: Context, channel_id: u64) {
                     if message.referenced_message.is_some() {
                         let referenced_message = message.referenced_message.clone().unwrap();
                         content = format!(
-                            "> ⤴️ {} said: {}\n\n{}\n\n",
+                            "> ⤴️ {} said: {}\n\n{}",
                             referenced_message.author.name,
                             referenced_message.content,
                             content,
