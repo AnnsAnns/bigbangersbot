@@ -135,7 +135,7 @@ async fn queue(handler: &Handler, ctx: Context, channel_id: u64) {
                         }
                     }
 
-                    let content = if message.content.is_empty() {
+                    let mut content = if message.content.is_empty() {
                         match embed {
                             Some(embed) => embed.title.clone().unwrap_or("".to_string()),
                             None => "".to_string(),
@@ -143,6 +143,16 @@ async fn queue(handler: &Handler, ctx: Context, channel_id: u64) {
                     } else {
                         message.content.clone()
                     };
+
+                    if message.referenced_message.is_some() {
+                        let referenced_message = message.referenced_message.clone().unwrap();
+                        content = format!(
+                            "> ⤴️ {} said: {}\n\n{}\n\n",
+                            referenced_message.author.name,
+                            referenced_message.content,
+                            content,
+                        );
+                    }
 
                     e.description(format!("{}\n\n👉 [Original Message]({})", content, msg_url));
                     e.footer(|f| f.text(format!("⭐ {} ", star_reaction.count)));
