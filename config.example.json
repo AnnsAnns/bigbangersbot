@@ -3,6 +3,10 @@
     "discordServer": 0,
     "discordToken": "<your_token>",
     "threshold": 1,
+    "reply": false,
+    "replies": [
+        "What a Big Banger 🤩"
+    ],
     "channels": [
         {
             "id": 0,
