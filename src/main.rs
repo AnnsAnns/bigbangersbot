@@ -42,7 +42,7 @@ async fn queue(handler: &Handler, ctx: Context, channel_id: u64) {
         serenity::model::channel::ReactionType::Unicode(APPROVED_EMOJI.to_string());
     let reaction_emoji =
         serenity::model::channel::ReactionType::Unicode(REACTION_EMOJI.to_string());
-        
+
     let own_id = match &ctx.http.get_current_user().await {
         Ok(user) => user.id,
         Err(_) => return,
@@ -194,7 +194,13 @@ impl EventHandler for Handler {
 #[tokio::main]
 async fn main() {
     // Parse channels from config
-    let config: Config = serde_json::from_str(&std::fs::read_to_string("config.json").unwrap())
+    let config_str = match std::fs::read_to_string("config.json") {
+        Ok(config_str) => config_str,
+        Err(_) => {
+            panic!("Failed to read config.json. Make sure it exists (See config.example.json)");
+        }
+    };
+    let config: Config = serde_json::from_str(&config_str)
         .expect("Failed to parse config.json");
 
     let intents = GatewayIntents::GUILD_MESSAGES | GatewayIntents::DIRECT_MESSAGES;
