@@ -42,14 +42,19 @@ async fn queue(handler: &Handler, ctx: Context, channel_id: u64) {
         serenity::model::channel::ReactionType::Unicode(APPROVED_EMOJI.to_string());
     let reaction_emoji =
         serenity::model::channel::ReactionType::Unicode(REACTION_EMOJI.to_string());
-    let own_id = &ctx.http.get_current_user().await.unwrap().id;
+        
+    let own_id = match &ctx.http.get_current_user().await {
+        Ok(user) => user.id,
+        Err(_) => return,
+    };
+
     let messages = match ctx.http.get_messages(channel_id, "").await {
         Ok(messages) => messages,
         Err(_) => return,
     };
 
     for message in messages {
-        if message.author.id == *own_id {
+        if message.author.id == own_id {
             continue;
         }
 
@@ -61,7 +66,7 @@ async fn queue(handler: &Handler, ctx: Context, channel_id: u64) {
             || approved_reactions
                 .unwrap()
                 .iter()
-                .any(|user| user.id == *own_id)
+                .any(|user| user.id == own_id)
         {
             continue;
         }
