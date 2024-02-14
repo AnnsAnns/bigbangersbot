@@ -37,6 +37,8 @@ struct Config {
 const REACTION_EMOJI: &str = "⭐";
 const APPROVED_EMOJI: &str = "🌠";
 
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 async fn queue(handler: &Handler, ctx: Context, channel_id: u64) {
     let approved_emoji =
         serenity::model::channel::ReactionType::Unicode(APPROVED_EMOJI.to_string());
@@ -175,6 +177,12 @@ impl EventHandler for Handler {
         let mut current_priority = Priority::High;
 
         println!("Logged in as {}", _ready.user.name);
+
+        // Set the bot's activity
+        ctx.set_activity(serenity::model::gateway::Activity::playing(&format!(
+            "on v{} ⭐",
+            VERSION
+        ))).await;
 
         loop {
             for channel in &self.config.channels {
