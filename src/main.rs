@@ -174,6 +174,8 @@ impl EventHandler for Handler {
     async fn ready(&self, ctx: Context, _ready: Ready) {
         let mut current_priority = Priority::High;
 
+        println!("Logged in as {}", _ready.user.name);
+
         loop {
             for channel in &self.config.channels {
                 if current_priority > channel.priority {
