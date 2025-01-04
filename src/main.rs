@@ -51,8 +51,6 @@ impl EventHandler for Handler {
     }
 
     async fn reaction_add(&self, ctx: Context, add_reaction: Reaction) {
-        println!("Reaction added: {:?}", add_reaction);
-
         if self.config.enable_channel_whitelist.is_some() && self.config.enable_channel_whitelist.unwrap() {
             let channel_id = add_reaction.channel_id;
 

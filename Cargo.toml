@@ -1,6 +1,6 @@
 [package]
 name = "big-bangers-bot"
-version = "1.2.0"
+version = "2.0.0"
 authors = ["AnnsAnn <git@annsann.eu>"]
 edition = "2021"
 
