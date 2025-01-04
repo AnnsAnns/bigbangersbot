@@ -121,7 +121,7 @@ impl EventHandler for Handler {
                 }
             }
 
-            display_name
+            format!("{} ({})", display_name, message.author.name)
         };
 
         let msg_url = &message.link_ensured(&ctx.http).await;
@@ -183,7 +183,7 @@ impl EventHandler for Handler {
 
         message_embed = message_embed
             .description(format!("{}\n\n👉 [Original Message]({})", content, msg_url))
-            .footer(CreateEmbedFooter::new(format!("⭐ {} ", star_reaction.count)))
+            .footer(CreateEmbedFooter::new(format!("⭐")))
             .timestamp(message.timestamp);
 
         let send_message = CreateMessage::new()
