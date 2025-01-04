@@ -107,11 +107,22 @@ impl EventHandler for Handler {
             return;
         }
 
-        let author_name = &message
-            .author
-            .nick_in(&ctx.http, self.config.discord_server)
-            .await
-            .unwrap_or(message.author.name.clone());
+        let discord_server_id = add_reaction.guild_id;
+
+        let author_name = {
+            let mut display_name = message.author.display_name().to_string();
+
+            if discord_server_id.is_some() {
+                let id = discord_server_id.unwrap();
+                let member = message.author.clone();
+                
+                if let Some(member_name) = member.nick_in(&ctx.http, id).await {
+                    display_name = member_name;
+                }
+            }
+
+            display_name
+        };
 
         let msg_url = &message.link_ensured(&ctx.http).await;
         let channel = ctx
