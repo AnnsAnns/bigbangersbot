@@ -7,14 +7,13 @@
     "replies": [
         "What a Big Banger 🤩"
     ],
+    "enableChannelWhitelist": false,
     "channels": [
         {
-            "id": 0,
-            "priority": "Low"
+            "id": 0
         },
         {
-            "id": 1,
-            "priority": "Medium"
+            "id": 1
         }
     ]
 }
