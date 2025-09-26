@@ -5,9 +5,11 @@ use serenity::{async_trait, builder::CreateEmbedAuthor};
 
 use serenity::model::gateway::Ready;
 use serenity::prelude::*;
+use tokio::sync::Semaphore;
 
 struct Handler {
     config: Config,
+    is_processing: Semaphore,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, PartialOrd)]
@@ -47,11 +49,13 @@ impl EventHandler for Handler {
         println!("Logged in as {}", _ready.user.name);
 
         // Set the bot's activity
-        ctx.set_activity(Some(ActivityData::playing(&format!("on v{} ⭐", VERSION))));
+        ctx.set_activity(Some(ActivityData::playing(format!("on v{} ⭐", VERSION))));
     }
 
     async fn reaction_add(&self, ctx: Context, add_reaction: Reaction) {
-        if self.config.enable_channel_whitelist.is_some() && self.config.enable_channel_whitelist.unwrap() {
+        if self.config.enable_channel_whitelist.is_some()
+            && self.config.enable_channel_whitelist.unwrap()
+        {
             let channel_id = add_reaction.channel_id;
 
             if !self
@@ -78,6 +82,8 @@ impl EventHandler for Handler {
             Ok(message) => message,
             Err(_) => return,
         };
+
+        let _ = self.is_processing.acquire().await.unwrap();
 
         let approved_reactions = message
             .reaction_users(&ctx.http, approved_emoji.clone(), None, None)
@@ -115,7 +121,7 @@ impl EventHandler for Handler {
             if discord_server_id.is_some() {
                 let id = discord_server_id.unwrap();
                 let member = message.author.clone();
-                
+
                 if let Some(member_name) = member.nick_in(&ctx.http, id).await {
                     display_name = member_name;
                 }
@@ -124,7 +130,7 @@ impl EventHandler for Handler {
             format!("{} ({})", display_name, message.author.name)
         };
 
-        let msg_url = &message.link_ensured(&ctx.http).await;
+        let msg_url = &message.link();
         let channel = ctx
             .http
             .get_channel(self.config.discord_channel.into())
@@ -144,8 +150,8 @@ impl EventHandler for Handler {
         };
 
         let image_str: Option<&str> = {
-            if image.is_some() {
-                Some(image.unwrap().url.as_str())
+            if let Some(image) = image {
+                Some(image.url.as_str())
             } else if embed.is_some() {
                 let embed = embed.unwrap();
                 if embed.thumbnail.is_some() {
@@ -183,16 +189,12 @@ impl EventHandler for Handler {
 
         message_embed = message_embed
             .description(format!("{}\n\n👉 [Original Message]({})", content, msg_url))
-            .footer(CreateEmbedFooter::new(format!("⭐")))
+            .footer(CreateEmbedFooter::new("⭐".to_string()))
             .timestamp(message.timestamp);
 
-        let send_message = CreateMessage::new()
-            .embed(message_embed);
+        let send_message = CreateMessage::new().embed(message_embed);
 
-        channel
-            .send_message(&ctx.http, send_message)
-            .await
-            .unwrap();
+        channel.send_message(&ctx.http, send_message).await.unwrap();
 
         message
             .react(&ctx.http, approved_emoji.clone())
@@ -227,7 +229,10 @@ async fn main() {
         | GatewayIntents::GUILD_MESSAGE_REACTIONS;
 
     let mut client = Client::builder(&config.discord_token, intents)
-        .event_handler(Handler { config })
+        .event_handler(Handler {
+            config,
+            is_processing: Semaphore::new(1),
+        })
         .await
         .expect("Err creating client");
 
