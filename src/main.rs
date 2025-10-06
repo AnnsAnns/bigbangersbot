@@ -5,11 +5,13 @@ use serenity::{async_trait, builder::CreateEmbedAuthor};
 
 use serenity::model::gateway::Ready;
 use serenity::prelude::*;
-use tokio::sync::Semaphore;
+use std::collections::HashSet;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 struct Handler {
     config: Config,
-    is_processing: Semaphore,
+    approved_messages: Arc<Mutex<HashSet<u64>>>,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, PartialOrd)]
@@ -53,6 +55,8 @@ impl EventHandler for Handler {
     }
 
     async fn reaction_add(&self, ctx: Context, add_reaction: Reaction) {
+        let mut approved_messages = self.approved_messages.lock().await;
+
         if self.config.enable_channel_whitelist.is_some()
             && self.config.enable_channel_whitelist.unwrap()
         {
@@ -66,6 +70,13 @@ impl EventHandler for Handler {
             {
                 return;
             }
+        }
+
+        let message_id = add_reaction.message_id.get();
+        
+        // Check if we've already processed this message
+        if approved_messages.contains(&message_id) {
+            return;
         }
 
         let approved_emoji =
@@ -82,8 +93,6 @@ impl EventHandler for Handler {
             Ok(message) => message,
             Err(_) => return,
         };
-
-        let _ = self.is_processing.acquire().await.unwrap();
 
         let approved_reactions = message
             .reaction_users(&ctx.http, approved_emoji.clone(), None, None)
@@ -201,6 +210,9 @@ impl EventHandler for Handler {
             .await
             .unwrap();
 
+        // Mark this message as approved
+        approved_messages.insert(message_id);
+
         if self.config.reply {
             let reply = self.config.replies.choose(&mut rand::thread_rng());
 
@@ -231,7 +243,7 @@ async fn main() {
     let mut client = Client::builder(&config.discord_token, intents)
         .event_handler(Handler {
             config,
-            is_processing: Semaphore::new(1),
+            approved_messages: Arc::new(Mutex::new(HashSet::new())),
         })
         .await
         .expect("Err creating client");
