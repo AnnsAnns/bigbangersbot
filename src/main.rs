@@ -54,58 +54,116 @@ impl EventHandler for Handler {
         ctx.set_activity(Some(ActivityData::playing(format!("on v{} ⭐", VERSION))));
     }
 
+    /// Basically the main logic of the bot
+    /// Triggered when a reaction is added to a message
     async fn reaction_add(&self, ctx: Context, add_reaction: Reaction) {
-        let mut approved_messages = self.approved_messages.lock().await;
-
-        if self.config.enable_channel_whitelist.is_some()
-            && self.config.enable_channel_whitelist.unwrap()
-        {
-            let channel_id = add_reaction.channel_id;
-
-            if !self
-                .config
-                .channels
-                .iter()
-                .any(|channel| channel.id.to_string() == channel_id.to_string())
-            {
-                return;
-            }
+        // Only process whitelisted channels
+        if !self.is_channel_whitelisted(add_reaction.channel_id) {
+            return;
         }
 
         let message_id = add_reaction.message_id.get();
-        
+
+        // This is a temporary local in-memory storage to keep track of approved messages
+        // to avoid cases where discord cache doesn't properly show the bot's own reactions
+        let mut approved_messages = self.approved_messages.lock().await;
         // Check if we've already processed this message
         if approved_messages.contains(&message_id) {
             return;
         }
 
-        let approved_emoji =
-            serenity::model::channel::ReactionType::Unicode(APPROVED_EMOJI.to_string());
-        let reaction_emoji =
-            serenity::model::channel::ReactionType::Unicode(REACTION_EMOJI.to_string());
-
-        let own_id = match &ctx.http.get_current_user().await {
-            Ok(user) => user.id,
-            Err(_) => return,
-        };
-
+        // Checks for cases where the reaction is to non-existent messages
         let message = match add_reaction.message(&ctx.http).await {
             Ok(message) => message,
             Err(_) => return,
+        };
+
+        // Check if the bot has already approved this message on discord
+        if self.has_approved_reaction(&ctx, &message).await {
+            return;
+        }
+
+        // Only processes once the star reaction threshold is met
+        if self.meets_star_threshold(&message) {
+            let discord_server_id = add_reaction.guild_id;
+
+            // Create and send the starboard message
+            self.create_starboard_message(&ctx, &message, discord_server_id)
+                .await;
+
+            let approved_emoji =
+                serenity::model::channel::ReactionType::Unicode(APPROVED_EMOJI.to_string());
+            message
+                .react(&ctx.http, approved_emoji.clone())
+                .await
+                .unwrap();
+
+            // Mark this message as approved
+            approved_messages.insert(message_id);
+
+            if self.config.reply {
+                let reply = self.config.replies.choose(&mut rand::thread_rng());
+
+                if reply.is_none() {
+                    return;
+                }
+
+                message.reply(&ctx.http, reply.unwrap()).await.unwrap();
+            }
+        }
+    }
+}
+
+impl Handler {
+    /// Check if the channel is whitelisted
+    /// If channel whitelisting is disabled, all channels are considered whitelisted
+    fn is_channel_whitelisted(&self, channel_id: serenity::model::id::ChannelId) -> bool {
+        if self.config.enable_channel_whitelist.unwrap_or(false) {
+            self.config
+                .channels
+                .iter()
+                .any(|channel| channel.id == channel_id.get())
+        } else {
+            true
+        }
+    }
+
+    /// Check if the bot has already approved the message
+    /// by reacting with the approved emoji
+    /// If the bot has approved the message, return true
+    async fn has_approved_reaction(
+        &self,
+        ctx: &Context,
+        message: &serenity::model::channel::Message,
+    ) -> bool {
+        let approved_emoji =
+            serenity::model::channel::ReactionType::Unicode(APPROVED_EMOJI.to_string());
+
+        let own_id = match &ctx.http.get_current_user().await {
+            Ok(user) => user.id,
+            Err(_) => return false,
         };
 
         let approved_reactions = message
             .reaction_users(&ctx.http, approved_emoji.clone(), None, None)
             .await;
 
-        if approved_reactions.is_err()
-            || approved_reactions
-                .unwrap()
-                .iter()
-                .any(|user| user.id == own_id)
-        {
-            return;
+        if approved_reactions.is_err() {
+            return false;
         }
+
+        approved_reactions
+            .unwrap()
+            .iter()
+            .any(|user| user.id == own_id)
+    }
+
+    /// Check if the message meets the star threshold
+    /// by counting the number of star reactions
+    /// If the number of star reactions is greater than or equal to the threshold, return true
+    fn meets_star_threshold(&self, message: &serenity::model::channel::Message) -> bool {
+        let reaction_emoji =
+            serenity::model::channel::ReactionType::Unicode(REACTION_EMOJI.to_string());
 
         let star_reactions = message
             .reactions
@@ -113,17 +171,24 @@ impl EventHandler for Handler {
             .find(|reaction| reaction.reaction_type == reaction_emoji);
 
         if star_reactions.is_none() {
-            return;
+            return false;
         }
 
         let star_reaction = star_reactions.unwrap().clone();
 
-        if star_reaction.count < self.config.threshold {
-            return;
-        }
+        star_reaction.count >= self.config.threshold
+    }
 
-        let discord_server_id = add_reaction.guild_id;
-
+    /// Create and send the starboard message
+    /// with the original message content, author, and link
+    /// to the original message
+    /// Also (tries) to include most images/embeds
+    async fn create_starboard_message(
+        &self,
+        ctx: &Context,
+        message: &serenity::model::channel::Message,
+        discord_server_id: Option<serenity::model::id::GuildId>,
+    ) {
         let author_name = {
             let mut display_name = message.author.display_name().to_string();
 
@@ -158,6 +223,8 @@ impl EventHandler for Handler {
             message.content.clone()
         };
 
+        // There are like 50 different places an image can be in a message
+        // ... for some reason
         let image_str: Option<&str> = {
             if let Some(image) = image {
                 Some(image.url.as_str())
@@ -204,24 +271,6 @@ impl EventHandler for Handler {
         let send_message = CreateMessage::new().embed(message_embed);
 
         channel.send_message(&ctx.http, send_message).await.unwrap();
-
-        message
-            .react(&ctx.http, approved_emoji.clone())
-            .await
-            .unwrap();
-
-        // Mark this message as approved
-        approved_messages.insert(message_id);
-
-        if self.config.reply {
-            let reply = self.config.replies.choose(&mut rand::thread_rng());
-
-            if reply.is_none() {
-                return;
-            }
-
-            message.reply(&ctx.http, reply.unwrap()).await.unwrap();
-        }
     }
 }
 
