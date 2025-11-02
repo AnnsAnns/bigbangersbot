@@ -192,8 +192,7 @@ impl Handler {
         let author_name = {
             let mut display_name = message.author.display_name().to_string();
 
-            if discord_server_id.is_some() {
-                let id = discord_server_id.unwrap();
+            if let Some(id) = discord_server_id {
                 let member = message.author.clone();
 
                 if let Some(member_name) = member.nick_in(&ctx.http, id).await {
@@ -228,8 +227,7 @@ impl Handler {
         let image_str: Option<&str> = {
             if let Some(image) = image {
                 Some(image.url.as_str())
-            } else if embed.is_some() {
-                let embed = embed.unwrap();
+            } else if let Some(embed) = embed {
                 if embed.thumbnail.is_some() {
                     Some(embed.thumbnail.as_ref().unwrap().url.as_str())
                 } else if embed.image.is_some() {
