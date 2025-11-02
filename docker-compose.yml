@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  bigbangersbot:
+    # Option 1: Build locally
+    build: .
+    
+    # Option 2: Use pre-built image from GitHub Container Registry
+    # Uncomment the line below and comment out 'build: .' above
+    # image: ghcr.io/annsanns/bigbangersbot:latest
+    
+    container_name: big-bangers-bot
+    restart: unless-stopped
+    volumes:
+      # Mount your config.json file (READ-ONLY)
+      - ./config.json:/app/config.json:ro
