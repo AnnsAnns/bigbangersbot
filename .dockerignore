@@ -5,3 +5,4 @@ target/
 LICENSE
 .gitignore
 config.json
+approved_messages.json

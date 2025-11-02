@@ -40,6 +40,7 @@ struct Config {
     reply: bool,
     replies: Vec<String>,
     enable_channel_whitelist: Option<bool>,
+    persistence_file: Option<String>,
 }
 
 const REACTION_EMOJI: &str = "⭐";
@@ -91,7 +92,7 @@ impl EventHandler for Handler {
             if let Some(starboard_message_id) = approved_messages.get(&message_id) {
                 self.update_starboard_message(
                     &ctx,
-                    starboard_message_id.clone(),
+                    *starboard_message_id,
                     &message,
                     discord_server_id,
                 )
@@ -312,24 +313,35 @@ impl Handler {
             .unwrap()
             .id();
 
-        let send_message = self
+        if channel
+            .message(&ctx.http, starboard_message_id)
+            .await
+            .is_err()
+        {
+            eprintln!(
+                "Starboard message {} not found, cannot update.",
+                starboard_message_id
+            );
+            return;
+        }
+
+        let starboard_embed = self
             .build_starboard_embed(ctx, message, discord_server_id)
             .await;
 
-        channel
+        if let Err(err) = channel
             .edit_message(
                 &ctx.http,
                 starboard_message_id,
-                EditMessage::new().embed(send_message),
+                EditMessage::new().embed(starboard_embed),
             )
             .await
-            .unwrap();
-
-        println!(
-            "Updated starboard message {} for original message {}",
-            starboard_message_id,
-            message.id.get()
-        );
+        {
+            eprintln!(
+                "Failed to update starboard message {}: {:?}",
+                starboard_message_id, err
+            );
+        }
     }
 
     /// Create and send the starboard message
@@ -347,16 +359,57 @@ impl Handler {
             .unwrap()
             .id();
 
-        let send_message = self
+        let starboard_embed = self
             .build_starboard_embed(ctx, message, discord_server_id)
             .await;
 
         let starboard_message = channel
-            .send_message(&ctx.http, CreateMessage::new().embed(send_message))
+            .send_message(&ctx.http, CreateMessage::new().embed(starboard_embed))
             .await
             .unwrap();
 
         starboard_message.id.get()
+    }
+}
+
+/// Load approved messages from disk
+fn load_approved_messages(file_path: &str) -> HashMap<u64, u64> {
+    match std::fs::read_to_string(file_path) {
+        Ok(data) => match serde_json::from_str::<HashMap<u64, u64>>(&data) {
+            Ok(map) => {
+                println!("Loaded {} approved messages from {}", map.len(), file_path);
+                map
+            }
+            Err(e) => {
+                println!(
+                    "Failed to parse {}: {}. Starting with empty map.",
+                    file_path, e
+                );
+                HashMap::new()
+            }
+        },
+        Err(_) => {
+            println!(
+                "No persistence file found at {}. Starting with empty map.",
+                file_path
+            );
+            HashMap::new()
+        }
+    }
+}
+
+/// Save approved messages to disk
+fn save_approved_messages(file_path: &str, messages: &HashMap<u64, u64>) {
+    match serde_json::to_string_pretty(messages) {
+        Ok(data) => match std::fs::write(file_path, data) {
+            Ok(_) => println!(
+                "Saved {} approved messages to {}",
+                messages.len(),
+                file_path
+            ),
+            Err(e) => eprintln!("Failed to write to {}: {}", file_path, e),
+        },
+        Err(e) => eprintln!("Failed to serialize approved messages: {}", e),
     }
 }
 
@@ -371,14 +424,40 @@ async fn main() {
     };
     let config: Config = serde_json::from_str(&config_str).expect("Failed to parse config.json");
 
+    // Load approved messages from disk if persistence is enabled
+    let persistence_file = config
+        .persistence_file
+        .clone()
+        .unwrap_or_else(|| "approved_messages.json".to_string());
+    let approved_messages = load_approved_messages(&persistence_file);
+    let approved_messages_arc = Arc::new(Mutex::new(approved_messages));
+
     let intents = GatewayIntents::GUILD_MESSAGES
         | GatewayIntents::DIRECT_MESSAGES
         | GatewayIntents::GUILD_MESSAGE_REACTIONS;
 
+    let approved_messages_for_shutdown = approved_messages_arc.clone();
+    let persistence_file_for_shutdown = persistence_file.clone();
+
+    // Set up graceful shutdown handler
+    tokio::spawn(async move {
+        match tokio::signal::ctrl_c().await {
+            Ok(()) => {
+                println!("\nReceived Ctrl+C, saving data and shutting down...");
+                let messages = approved_messages_for_shutdown.lock().await;
+                save_approved_messages(&persistence_file_for_shutdown, &messages);
+                std::process::exit(0);
+            }
+            Err(err) => {
+                eprintln!("Unable to listen for shutdown signal: {}", err);
+            }
+        }
+    });
+
     let mut client = Client::builder(&config.discord_token, intents)
         .event_handler(Handler {
             config,
-            approved_messages: Arc::new(Mutex::new(HashMap::new())),
+            approved_messages: approved_messages_arc.clone(),
         })
         .await
         .expect("Err creating client");
@@ -386,4 +465,8 @@ async fn main() {
     if let Err(why) = client.start().await {
         println!("Client error: {:?}", why);
     }
+
+    // Save on normal shutdown
+    let messages = approved_messages_arc.lock().await;
+    save_approved_messages(&persistence_file, &messages);
 }

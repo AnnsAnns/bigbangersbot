@@ -15,5 +15,6 @@
         {
             "id": 1
         }
-    ]
+    ],
+    "persistenceFile": "approved_messages.json"
 }
