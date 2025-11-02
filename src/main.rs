@@ -64,6 +64,19 @@ impl EventHandler for Handler {
 
         let message_id = add_reaction.message_id.get();
 
+        // Checks for cases where the reaction is to non-existent messages
+        let message = match add_reaction.message(&ctx.http).await {
+            Ok(message) => message,
+            Err(_) => return,
+        };
+
+        // Check if the bot has already approved this message on discord
+        // or if the message doesn't meet the star threshold
+        if !self.meets_star_threshold(&message) || self.has_approved_reaction(&ctx, &message).await
+        {
+            return;
+        }
+
         // This is a temporary local in-memory storage to keep track of approved messages
         // to avoid cases where discord cache doesn't properly show the bot's own reactions
         let mut approved_messages = self.approved_messages.lock().await;
@@ -72,44 +85,30 @@ impl EventHandler for Handler {
             return;
         }
 
-        // Checks for cases where the reaction is to non-existent messages
-        let message = match add_reaction.message(&ctx.http).await {
-            Ok(message) => message,
-            Err(_) => return,
-        };
+        let discord_server_id = add_reaction.guild_id;
 
-        // Check if the bot has already approved this message on discord
-        if self.has_approved_reaction(&ctx, &message).await {
-            return;
-        }
+        // Create and send the starboard message
+        self.create_starboard_message(&ctx, &message, discord_server_id)
+            .await;
 
-        // Only processes once the star reaction threshold is met
-        if self.meets_star_threshold(&message) {
-            let discord_server_id = add_reaction.guild_id;
+        let approved_emoji =
+            serenity::model::channel::ReactionType::Unicode(APPROVED_EMOJI.to_string());
+        message
+            .react(&ctx.http, approved_emoji.clone())
+            .await
+            .unwrap();
 
-            // Create and send the starboard message
-            self.create_starboard_message(&ctx, &message, discord_server_id)
-                .await;
+        // Mark this message as approved
+        approved_messages.insert(message_id);
 
-            let approved_emoji =
-                serenity::model::channel::ReactionType::Unicode(APPROVED_EMOJI.to_string());
-            message
-                .react(&ctx.http, approved_emoji.clone())
-                .await
-                .unwrap();
+        if self.config.reply {
+            let reply = self.config.replies.choose(&mut rand::thread_rng());
 
-            // Mark this message as approved
-            approved_messages.insert(message_id);
-
-            if self.config.reply {
-                let reply = self.config.replies.choose(&mut rand::thread_rng());
-
-                if reply.is_none() {
-                    return;
-                }
-
-                message.reply(&ctx.http, reply.unwrap()).await.unwrap();
+            if reply.is_none() {
+                return;
             }
+
+            message.reply(&ctx.http, reply.unwrap()).await.unwrap();
         }
     }
 }
